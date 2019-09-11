@@ -42,18 +42,25 @@ namespace nbiot {
             let b = a.slice(1).split(":")
             let cmd = b[0]
             let params = b[1].split(',')
-            //console.log(cmd)
-            //console.log(params.length())
-            //console.log(params.join("#"))
+            console.log(">>" + cmd + "/"+ params.length() + "/" + params.join("#"))
         }
 
     })
 
-    function sendAtCmd(op: string, cmd: string){
-        let str = "AT+"+op+"="+cmd
+    function sendAtCmd(op: string, cmd: string) {
+        let str = "AT+" + op + "=" + cmd
         lastCmd = op
-        console.log(str)
         serial.writeLine(str)
+    }
+
+    function cellInit() {
+        // cell init sequence
+        sendAtCmd("COPS", `1, 2, "46000"`)
+        basic.pause(200)
+        sendAtCmd("CSCON", "1")
+        basic.pause(200)
+        sendAtCmd("CEREG", "1")
+
     }
 
     /**
@@ -65,20 +72,23 @@ namespace nbiot {
     //% weight=100
     export function nbiot_init(tx: SerialPin, rx: SerialPin): void {
         serial.redirect(
-            SerialPin.P13,
-            SerialPin.P16,
-            BaudRate.BaudRate115200
+            tx,
+            rx,
+            BaudRate.BaudRate9600
         )
         basic.pause(100)
         serial.setTxBufferSize(64)
         serial.setRxBufferSize(64)
         serial.readString()
+        serial.writeString('\n\n')
+        basic.pause(1000)
+        cellInit();
     }
 
     //% blockId=nbiot_mqttconfig block="Mqtt Config Host %host|Port %port|ClientID %id|User %user|Pass %pass"
     //% weight=100
     export function nbiot_config(host: string, port: number, id: string, user?: string, pass?: string): void {
-        let cmd = `"${host}",${port},"${id},60,"${user}","${pass},1"`
+        let cmd = `"${host}",${port},"${id}",60,"${user}","${pass}",1`
         sendAtCmd("MQTTCFG", cmd)
     }
 
@@ -90,14 +100,17 @@ namespace nbiot {
 
     //% blockId=nbiot_mqttsub block="Mqtt Subscribe %topic"
     export function nbiot_mqttsub(topic: string, handler: (str: string) => void) {
-        let cmd = `AT+MQTTSUB="${topic}",1`
-        console.log(cmd)
-        // serial.writeLine(cmd)
-        cmdCache.push(cmd)
-        let topicHandler = new StringMessageHandler()
+        sendAtCmd("MQTTSUB", `"${topic}", 1`)
+        cmdCache.push(cmd)        let topicHandler = new StringMessageHandler()
         topicHandler.fn = handler
         topicHandler.topicName = topic
         topicCB.push(topicHandler)
+    }
+
+    //% blockId=nbiot_mqttpub block="Mqtt Public %topic data%data||Qos %qos"
+    export function nbiot_mqttpub(topic: string, data: string, qos?: number) {
+        qos = qos ? 1 : 0;
+        sendAtCmd("MQTTPUB", `"${topic}",${qos},0,0,0,"${data}"`)
     }
 
 }
