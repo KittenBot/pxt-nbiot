@@ -39,13 +39,22 @@ namespace nbiot {
     let topicCB: StringMessageHandler[] = []
     let isConn: boolean = false;
 
+    function trim(n: string):string {
+        while (n.charCodeAt(n.length-1)<0x1f) {
+            n = n.slice(0, n.length-1)
+        }
+        return n;
+    }
+
     serial.onDataReceived('\n', function () {
         let a = serial.readString()
         if (a.charCodeAt(0) > 0x1f) {
             console.log(">>" + a)
         }
+        
         if (a.charAt(0) == '+') {
-            let b = a.slice(1, a.length - 1).split(":")
+            a = trim(a)
+            let b = a.slice(1, a.length).split(":")
             let cmd = b[0]
             let params = b[1].split(',')
             if (cmd == "CEREG") { // eps registered
@@ -75,17 +84,6 @@ namespace nbiot {
         basic.pause(200)
     }
 
-    function cellInit() {
-        // cell init sequence
-        serial.writeLine("AT+NRB")
-        basic.pause(8000) // wait reboot finish
-        sendAtCmd("COPS", `0`)
-        sendAtCmd("CGATT", `1`)
-        sendAtCmd("CSCON", `1`)
-        sendAtCmd("CEREG", `1`)
-        serial.writeLine("AT+CSQ")
-    }
-
     /**
      * init serial port
      * @param tx Tx pin; eg: SerialPin.P1
@@ -105,9 +103,37 @@ namespace nbiot {
         serial.readString()
         serial.writeString('\n\n')
         basic.pause(1000)
-        cellInit();
     }
 
+    //% blockId=nbiot_join4g block="NBIOT Join 4G"
+    //% weight=100
+    export function nbiot_join4g() {
+        // cell init sequence
+        serial.writeLine("AT+NRB")
+        basic.pause(8000) // wait reboot finish
+        sendAtCmd("COPS", `0`)
+        sendAtCmd("CGATT", `1`)
+        sendAtCmd("CSCON", `1`)
+        sendAtCmd("CEREG", `1`)
+        serial.writeLine("AT+CSQ")
+        let cnt = 1;
+        while (!isConn) {
+            basic.showIcon(IconNames.Diamond)
+            basic.pause(500)
+            basic.showIcon(IconNames.SmallDiamond)
+            basic.pause(500)
+            cnt += 1;
+            if (cnt % 5 == 0) {
+                nbiot_checkcon()
+            }
+            if (cnt > 120) {
+                // max 2min wait
+                basic.showIcon(IconNames.No)
+                return;
+            }
+        }
+        basic.showIcon(IconNames.Heart)
+    }
 
     /**
      * Mqtt host config
@@ -169,7 +195,7 @@ namespace nbiot {
 
     //% blockId=nbiot_mqttpub block="Mqtt Public %topic data%data||Qos %qos"
     export function nbiot_mqttpub(topic: string, data: string, qos?: number) {
-        qos = qos ? 1 : 0;
+        if (qos == undefined) qos = 1;
         sendAtCmd("MQTTPUB", `"${topic}",${qos},0,0,0,"${data}"`)
     }
 
@@ -181,12 +207,6 @@ namespace nbiot {
         basic.pause(200)
         serial.writeLine("AT+CEREG?")
         basic.pause(200)
-    }
-
-    //% blockId=on_net_connected block="on Net Connected"
-    //% weight=50
-    export function on_net_connected(handler: () => void): void {
-        netConn = handler;
     }
 
     //% blockId=on_mqtt_open block="on Mqtt Open"
