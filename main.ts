@@ -122,6 +122,32 @@ namespace nbiot {
         sendAtCmd("MQTTCFG", cmd)
     }
 
+    //% blockId=onenet_connect block="OneNet(mqtt) ProductID%prodid DevID%deviceid SN%sn"
+    //% weight=90
+    export function onenet_connect(prodid: string, deviceid: string, sn: string): void {
+        nbiot_config("mqtt.heclouds.com", 6002, deviceid, prodid, sn)
+    }
+
+    function int2hex(a: number): string {
+        let hexlist = "0123456789ABCDEF"
+        let b = hexlist.charAt((a & 0xf0) >> 4) + hexlist.charAt(a & 0xf)
+        return b;
+    }
+
+    //% blockId=onenet_pub block="OneNet Pub DataStream%topic Data%data"
+    //% weight=80
+    export function onenet_pub(topic: string, data: string): void {
+        let cmd = ",;" + topic + "," + data + ";"
+        // let output = "\${5}\${0}\${" + cmd.length + "}" + cmd;
+        let hexlen = cmd.length + 3;
+        let hexstr = "0500" + int2hex(cmd.length)
+        for (let i=0;i<cmd.length;i++){
+            hexstr += int2hex(cmd.charCodeAt(i))
+        }
+        // nbiot_mqttpub("$dp", output);
+        sendAtCmd("MQTTPUB", `"$dp",1,0,0,${hexlen},"${hexstr}"`)
+    }
+
     //% blockId=nbiot_mqttconn block="Mqtt Connect"
     export function nbiot_mqttconn() {
         let cmd = `1,1,0,0,0,"",""`
