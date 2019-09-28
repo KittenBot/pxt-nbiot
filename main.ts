@@ -58,6 +58,7 @@ namespace nbiot {
     let stringMessageHandlerList: StringMessageHandler[] = []
     let keyValueMessageHandlerList: KeyValueMessageHandler[] = []
     let isConn: boolean = false;
+    let iftttKey: string;
 
     function trim(n: string):string {
         while (n.charCodeAt(n.length-1)<0x1f) {
@@ -211,6 +212,12 @@ namespace nbiot {
         serial.readString()
         serial.writeString('\n\n')
         basic.pause(1000)
+    }
+
+    //% blockId=nbiot_init block="NBIOT init powerbrick|Port %port"
+    //% weight=100
+    export function nbiot_init_pw(port: SerialPorts): void {
+        nbiot_init(PortSerial[port][1], PortSerial[port][0]);
     }
 
     //% blockId=nbiot_join4g block="NBIOT Join 4G"
@@ -391,4 +398,24 @@ namespace nbiot {
         keyValueMessageHandlerList.push(topicHandler)
     }
 
+    //% blockId=ifttt_setkey
+    //% block="IFTTT Set Key %key"
+    //% weight=20
+    export function ifttt_setkey(key: string, ) {
+        iftttKey = key;
+    }
+
+    //% blockId=ifttt_trig
+    //% block="IFTTT trig Event%event %value = %data"
+    //% weight=19
+    //% advanced=true
+    export function ifttt_trig(event: string, value: string, data: string) {
+        sendAtCmd("HTTPCREATE", `http://maker.ifttt.com/`)
+        basic.pause(500)
+        sendAtCmd("HTTPHEADER", `0,"Content-Type: application/x-www-form-urlencoded;"`)
+        basic.pause(100)
+        sendAtCmd("HTTPCONTENT", `0,"${value}=${data}"`)
+        basic.pause(100)
+        sendAtCmd("HTTPSEND", `0,1,"/trigger/${event}/with/key/${iftttKey}"`)
+    }
 }
