@@ -27,6 +27,24 @@ namespace nbiot {
         fn: (stringMessage: string) => void;
     }
 
+    export class KeyValueMessageHandler {
+        topicName: string;
+        fn: (key: string, value: string) => void;
+    }
+
+    export class KeyValueMessage {
+        key: string;
+        value: string;
+    }
+
+    export class MakerCloudMessage {
+        deviceName: string;
+        deviceSerialNumber: string;
+        rawMessage: string;
+        stringMessageList: string[];
+        keyValueMessagList: KeyValueMessage[];
+    }
+
     type EvtStr = (data: string) => void;
     type EvtAct = () => void;
     type EvtNum = (data: number) => void;
@@ -37,6 +55,8 @@ namespace nbiot {
 
     let lastCmd: string;
     let topicCB: StringMessageHandler[] = []
+    let stringMessageHandlerList: StringMessageHandler[] = []
+    let keyValueMessageHandlerList: KeyValueMessageHandler[] = []
     let isConn: boolean = false;
 
     function trim(n: string):string {
@@ -44,6 +64,89 @@ namespace nbiot {
             n = n.slice(0, n.length-1)
         }
         return n;
+    }
+
+    function handleTopicStringMessage(topic: string, stringMessageList: string[]) {
+        let i = 0
+        for (i = 0; i < stringMessageHandlerList.length; i++) {
+            if (stringMessageHandlerList[i].topicName == topic) {
+                let j = 0;
+                for (j = 0; j < stringMessageList.length; j++) {
+                    stringMessageHandlerList[i].fn(stringMessageList[j]);
+                }
+                break
+            }
+        }
+    }
+
+    function handleTopicKeyValueMessage(topic: string, keyValueMessageList: KeyValueMessage[]) {
+        let i = 0
+        for (i = 0; i < keyValueMessageHandlerList.length; i++) {
+            if (keyValueMessageHandlerList[i].topicName == topic) {
+                let j = 0;
+                for (j = 0; j < keyValueMessageList.length; j++) {
+                    keyValueMessageHandlerList[i].fn(keyValueMessageList[j].key, keyValueMessageList[j].value);
+                }
+                break
+            }
+        }
+    }
+
+    export function countDelimitor(msg: string, delimitor: string): number {
+        let count: number = 0;
+        let i = 0;
+        for (i = 0; i < msg.length; i++) {
+            if (msg.charAt(i) == delimitor) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    export function parseMakerCloudMessage(topicMessage: string): MakerCloudMessage {
+        let makerCloudMessage = new MakerCloudMessage();
+        makerCloudMessage.rawMessage = topicMessage;
+        makerCloudMessage.deviceName = "";
+        makerCloudMessage.deviceSerialNumber = "";
+        makerCloudMessage.keyValueMessagList = [];
+        makerCloudMessage.stringMessageList = [];
+
+        let delimitor = ",";
+        let start = 0;
+        let oldMessage: string = topicMessage;
+
+        let i = 0;
+        let total = countDelimitor(oldMessage, delimitor);
+        for (i = 0; i <= total; i++) {
+            let end = oldMessage.indexOf(delimitor);
+            if (end == -1) {
+                end = oldMessage.length
+            }
+            let subMessage = oldMessage.substr(0, end);
+            if (subMessage.indexOf("=") == -1) {
+                makerCloudMessage.stringMessageList[makerCloudMessage.stringMessageList.length] = subMessage
+            } else {
+                let splitIndex = subMessage.indexOf("=");
+                let key = subMessage.substr(0, splitIndex);
+                let value = subMessage.substr(splitIndex + 1)
+
+                if (value.length > 0) {
+                    if (key == "_dsn") {
+                        makerCloudMessage.deviceSerialNumber = value;
+                    } else if (key == "_dn") {
+                        makerCloudMessage.deviceName = value;
+                    } else {
+                        let keyValue = new KeyValueMessage();
+                        keyValue.key = key;
+                        keyValue.value = value;
+                        makerCloudMessage.keyValueMessagList[makerCloudMessage.keyValueMessagList.length] = keyValue;
+                    }
+                }
+            }
+            oldMessage = oldMessage.substr(end + 1, oldMessage.length);
+        }
+
+        return makerCloudMessage;
     }
 
     serial.onDataReceived('\n', function () {
@@ -67,11 +170,16 @@ namespace nbiot {
             } else if (cmd == "MQTTOPEN") {
                 if (mqttOpen) mqttOpen()
             } else if (cmd == "MQTTPUBLISH") {
+                let topic = params[4]
+                let data = params[6]
                 for (let i = 0; i < topicCB.length; i++) {
-                    if (topicCB[i].topicName == params[4]) {
-                        topicCB[i].fn(params[6])
+                    if (topicCB[i].topicName == topic) {
+                        topicCB[i].fn(data)
                     }
                 }
+                let makerCloudMessage = parseMakerCloudMessage(data);
+                handleTopicStringMessage(topic, makerCloudMessage.stringMessageList);
+                handleTopicKeyValueMessage(topic, makerCloudMessage.keyValueMessagList)
             }
         }
 
@@ -213,6 +321,74 @@ namespace nbiot {
     //% weight=50
     export function on_mqtt_open(handler: () => void): void {
         mqttOpen = handler;
+    }
+
+    //% blockId=makercloud_connect block="MakerCloud ProductID%prodid DevID%deviceid SN%sn"
+    //% weight=40
+    export function makercloud_connect(prodid: string, deviceid: string, sn: string): void {
+        nbiot_config("mqtt.heclouds.com", 6002, deviceid, prodid, sn)
+    }
+
+    //% blockId=makercloud_pub block="MakerCloud tell %topic about %message"
+    //% weight=39
+    export function makercloud_pub(topic: string, message: string): void {
+        message = "_dsn=" + control.deviceSerialNumber() + ",_dn=" + control.deviceName() + "," + message
+
+        let cmd = ",;" + topic + "," + message + ";"
+        let hexlen = cmd.length + 3;
+        let hexstr = "0500" + int2hex(cmd.length)
+        for (let i = 0; i < cmd.length; i++) {
+            hexstr += int2hex(cmd.charCodeAt(i))
+        }
+        sendAtCmd("MQTTPUB", `"$dp",1,0,0,${hexlen},"${hexstr}"`)
+    }
+
+    //% blockId=makercloud_pub_keyvalue block="MakerCloud tell %topic about %key = $value"
+    //% weight=38
+    export function makercloud_pub_keyvalue(topic: string, key: string, value: string): void {
+        let message = "_dsn=" + control.deviceSerialNumber() + ",_dn=" + control.deviceName() + "," + key + "=" + value
+
+        let cmd = ",;" + topic + "," + message + ";"
+        let hexlen = cmd.length + 3;
+        let hexstr = "0500" + int2hex(cmd.length)
+        for (let i = 0; i < cmd.length; i++) {
+            hexstr += int2hex(cmd.charCodeAt(i))
+        }
+        sendAtCmd("MQTTPUB", `"$dp",1,0,0,${hexlen},"${hexstr}"`)
+    }
+
+    //% blockId=makercloud_mqttsub block="Makercloud i want to listen to %topic"
+    //% weight=36
+    export function makercloud_mqttsub(topic: string) {
+        sendAtCmd("MQTTSUB", `"${topic}",1`)
+    }
+
+    /**
+         * Listener for MQTT topic
+         * @param topic to topic ,eg: "ZXY"
+         */
+    //% blockId=mc_kt_register_topic_text_message_handler
+    //% block="When something talk to %topic, then"
+    //% weight=34
+    export function registerTopicMessageHandler(topic: string, fn: (textMessage: string) => void) {
+        let topicHandler = new StringMessageHandler()
+        topicHandler.fn = fn
+        topicHandler.topicName = topic
+        stringMessageHandlerList.push(topicHandler)
+    }
+
+    /**
+     * Listener for MQTT topic
+     * @param topic to topic ,eg: "ZXY"
+     */
+    //% blockId=mc_kt_register_topic_key_value_message_handler
+    //% block="When something talk to %topic, then"
+    //% weight=34
+    export function registerTopicKeyValueMessageHandler(topic: string, fn: (key: string, value: string) => void) {
+        let topicHandler = new KeyValueMessageHandler()
+        topicHandler.fn = fn
+        topicHandler.topicName = topic
+        keyValueMessageHandlerList.push(topicHandler)
     }
 
 }
