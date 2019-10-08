@@ -58,6 +58,7 @@ namespace nbiot {
     let stringMessageHandlerList: StringMessageHandler[] = []
     let keyValueMessageHandlerList: KeyValueMessageHandler[] = []
     let isConn: boolean = false;
+    let regDenied: boolean = false;
     let iftttKey: string;
 
     function trim(n: string):string {
@@ -162,11 +163,16 @@ namespace nbiot {
             let cmd = b[0]
             let params = b[1].split(',')
             if (cmd == "CEREG") { // eps registered
-                if ((params.length == 2 && params[1].charAt(0) == '1') ||
-                    (params.length == 1 && params[0].charAt(0) == '1')
-                ) {
+                if (params.length == 1 && params[0].charAt(0) == '1'){
                     isConn = true;
                     if (netConn) netConn()
+                } else if (params.length == 2){
+                    if (params[1].charAt(0) == '1'){
+                        isConn = true;
+                        if (netConn) netConn()
+                    } else if (params[1].charAt(0) == '3'){ // reg denied
+                        regDenied = true;
+                    }
                 }
             } else if (cmd == "MQTTOPEN") {
                 if (mqttOpen) mqttOpen()
@@ -214,7 +220,7 @@ namespace nbiot {
         basic.pause(1000)
     }
 
-    //% blockId=nbiot_init block="NBIOT init powerbrick|Port %port"
+    //% blockId=nbiot_init_pw block="NBIOT init powerbrick|Port %port"
     //% weight=100
     export function nbiot_init_pw(port: SerialPorts): void {
         nbiot_init(PortSerial[port][1], PortSerial[port][0]);
@@ -241,10 +247,12 @@ namespace nbiot {
             if (cnt % 5 == 0) {
                 nbiot_checkcon()
             }
-            if (cnt > 120) {
+            if (cnt > 120 || regDenied) {
                 // max 2min wait
-                basic.showIcon(IconNames.No)
-                return;
+                basic.showIcon(IconNames.Sad)
+                while(true){
+                    basic.pause(500)
+                }
             }
         }
         basic.showIcon(IconNames.Heart)
@@ -259,8 +267,13 @@ namespace nbiot {
     //% blockId=nbiot_mqttconfig block="Mqtt Config Host %host|Port %port|ClientID %id|User %user|Pass %pass"
     //% weight=100
     export function nbiot_config(host: string, port: number, id: string, user?: string, pass?: string): void {
+        if (user == undefined) user = '';
+        if (pass == undefined) pass = '';
         let cmd = `"${host}",${port},"${id}",60,"${user}","${pass}",1`
         sendAtCmd("MQTTCFG", cmd)
+        basic.pause(200);
+        cmd = `1,1,0,0,0,"",""`
+        sendAtCmd("MQTTOPEN", cmd)
     }
 
     //% blockId=onenet_connect block="OneNet(mqtt) ProductID%prodid DevID%deviceid SN%sn"
@@ -287,12 +300,6 @@ namespace nbiot {
         }
         // nbiot_mqttpub("$dp", output);
         sendAtCmd("MQTTPUB", `"$dp",1,0,0,${hexlen},"${hexstr}"`)
-    }
-
-    //% blockId=nbiot_mqttconn block="Mqtt Connect"
-    export function nbiot_mqttconn() {
-        let cmd = `1,1,0,0,0,"",""`
-        sendAtCmd("MQTTOPEN", cmd)
     }
 
     //% blockId=nbiot_mqttsub block="Mqtt Subscribe %topic"
@@ -330,10 +337,10 @@ namespace nbiot {
         mqttOpen = handler;
     }
 
-    //% blockId=makercloud_connect block="MakerCloud ProductID%prodid DevID%deviceid SN%sn"
+    //% blockId=makercloud_connect block="MakerCloud Init ID%clientID"
     //% weight=40
-    export function makercloud_connect(prodid: string, deviceid: string, sn: string): void {
-        nbiot_config("mqtt.heclouds.com", 6002, deviceid, prodid, sn)
+    export function makercloud_connect(clientID: string): void {
+        nbiot_config("mqtt.makercloud.scaleinnotech.com", 1883, clientID)
     }
 
     //% blockId=makercloud_pub block="MakerCloud tell %topic about %message"
