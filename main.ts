@@ -232,6 +232,8 @@ namespace nbiot {
         // cell init sequence
         serial.writeLine("AT+NRB")
         basic.pause(8000) // wait reboot finish
+        serial.writeLine("AT+CIMI")
+        basic.pause(200)
         sendAtCmd("COPS", `0`)
         sendAtCmd("CGATT", `1`)
         sendAtCmd("CSCON", `1`)
@@ -337,10 +339,10 @@ namespace nbiot {
         mqttOpen = handler;
     }
 
-    //% blockId=makercloud_connect block="MakerCloud Init ID%clientID"
+    //% blockId=makercloud_connect block="MakerCloud Init"
     //% weight=40
-    export function makercloud_connect(clientID: string): void {
-        nbiot_config("mqtt.makercloud.scaleinnotech.com", 1883, clientID)
+    export function makercloud_connect(): void {
+        nbiot_config("mqtt.makercloud.scaleinnotech.com", 1883, control.deviceName())
     }
 
     //% blockId=makercloud_pub block="MakerCloud tell %topic about %message"
@@ -348,13 +350,13 @@ namespace nbiot {
     export function makercloud_pub(topic: string, message: string): void {
         message = "_dsn=" + control.deviceSerialNumber() + ",_dn=" + control.deviceName() + "," + message
 
-        let cmd = ",;" + topic + "," + message + ";"
-        let hexlen = cmd.length + 3;
-        let hexstr = "0500" + int2hex(cmd.length)
-        for (let i = 0; i < cmd.length; i++) {
-            hexstr += int2hex(cmd.charCodeAt(i))
-        }
-        sendAtCmd("MQTTPUB", `"$dp",1,0,0,${hexlen},"${hexstr}"`)
+        // let cmd = ",;" + topic + "," + message + ";"
+        // let hexlen = cmd.length + 3;
+        // let hexstr = "0500" + int2hex(cmd.length)
+        // for (let i = 0; i < cmd.length; i++) {
+        //     hexstr += int2hex(cmd.charCodeAt(i))
+        // }
+        sendAtCmd("MQTTPUB", `"${topic}",1,0,0,0,"${message}"`)
     }
 
     //% blockId=makercloud_pub_keyvalue block="MakerCloud tell %topic about %key = $value"
@@ -362,13 +364,13 @@ namespace nbiot {
     export function makercloud_pub_keyvalue(topic: string, key: string, value: string): void {
         let message = "_dsn=" + control.deviceSerialNumber() + ",_dn=" + control.deviceName() + "," + key + "=" + value
 
-        let cmd = ",;" + topic + "," + message + ";"
-        let hexlen = cmd.length + 3;
-        let hexstr = "0500" + int2hex(cmd.length)
-        for (let i = 0; i < cmd.length; i++) {
-            hexstr += int2hex(cmd.charCodeAt(i))
-        }
-        sendAtCmd("MQTTPUB", `"$dp",1,0,0,${hexlen},"${hexstr}"`)
+        // let cmd = ",;" + topic + "," + message + ";"
+        // let hexlen = cmd.length + 3;
+        // let hexstr = "0500" + int2hex(cmd.length)
+        // for (let i = 0; i < cmd.length; i++) {
+        //    hexstr += int2hex(cmd.charCodeAt(i))
+        // }
+        sendAtCmd("MQTTPUB", `"${topic}",1,0,0,0,"${message}"`)
     }
 
     //% blockId=makercloud_mqttsub block="Makercloud i want to listen to %topic"
