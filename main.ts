@@ -147,7 +147,13 @@ namespace nbiot {
             }
             oldMessage = oldMessage.substr(end + 1, oldMessage.length);
         }
-
+        // console.log("dbg: " + makerCloudMessage.deviceName + "," + makerCloudMessage.deviceSerialNumber);
+        // for (let i=0;i<makerCloudMessage.stringMessageList.length;i++){
+        //     console.log("dbg #2:" + makerCloudMessage.stringMessageList[i])
+        // }
+        // for (let i = 0; i < makerCloudMessage.keyValueMessagList.length; i++) {
+        //     console.log("dbg #3:" + makerCloudMessage.keyValueMessagList[i].key + " = " + makerCloudMessage.keyValueMessagList[i].value)
+        // }
         return makerCloudMessage;
     }
 
@@ -178,7 +184,8 @@ namespace nbiot {
                 if (mqttOpen) mqttOpen()
             } else if (cmd == "MQTTPUBLISH") {
                 let topic = params[4]
-                let data = params[6]
+                let dataLen = params[5]
+                let data = params.slice(6).join(',')
                 for (let i = 0; i < topicCB.length; i++) {
                     if (topicCB[i].topicName == topic) {
                         topicCB[i].fn(data)
@@ -349,13 +356,6 @@ namespace nbiot {
     //% weight=39
     export function makercloud_pub(topic: string, message: string): void {
         message = "_dsn=" + control.deviceSerialNumber() + ",_dn=" + control.deviceName() + "," + message
-
-        // let cmd = ",;" + topic + "," + message + ";"
-        // let hexlen = cmd.length + 3;
-        // let hexstr = "0500" + int2hex(cmd.length)
-        // for (let i = 0; i < cmd.length; i++) {
-        //     hexstr += int2hex(cmd.charCodeAt(i))
-        // }
         sendAtCmd("MQTTPUB", `"${topic}",1,0,0,0,"${message}"`)
     }
 
@@ -363,13 +363,6 @@ namespace nbiot {
     //% weight=38
     export function makercloud_pub_keyvalue(topic: string, key: string, value: string): void {
         let message = "_dsn=" + control.deviceSerialNumber() + ",_dn=" + control.deviceName() + "," + key + "=" + value
-
-        // let cmd = ",;" + topic + "," + message + ";"
-        // let hexlen = cmd.length + 3;
-        // let hexstr = "0500" + int2hex(cmd.length)
-        // for (let i = 0; i < cmd.length; i++) {
-        //    hexstr += int2hex(cmd.charCodeAt(i))
-        // }
         sendAtCmd("MQTTPUB", `"${topic}",1,0,0,0,"${message}"`)
     }
 
