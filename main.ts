@@ -241,6 +241,8 @@ namespace nbiot {
         basic.pause(8000) // wait reboot finish
         serial.writeLine("AT+CIMI")
         basic.pause(200)
+        sendAtCmd("CMNLSET", `1`)
+        basic.pause(200)
         sendAtCmd("COPS", `0`)
         sendAtCmd("CGATT", `1`)
         sendAtCmd("CSCON", `1`)
